@@ -64,16 +64,26 @@ class ServerBase(object):
 
     @staticmethod
     def _zerorpc_filter_methods(cls, self, methods):
-        if hasattr(methods, '__getitem__'):
+        getattr_ = getattr(methods, '__getattr__', None)
+        if getattr_ is None and hasattr(methods, '__getitem__'):
             return methods
         server_methods = set(getattr(self, k) for k in dir(cls) if not
                 k.startswith('_'))
-        return dict((k, getattr(methods, k))
+        r = dict((k, getattr(methods, k))
                 for k in dir(methods)
                 if callable(getattr(methods, k))
                 and not k.startswith('_')
                 and getattr(methods, k) not in server_methods
                 )
+        if getattr_ is not None:
+            def functor(method, *args, **kargs):
+                '''Dynamically resolve methods
+
+                Some methods are dynamically resolved and so can't be infererd.
+                '''
+                return getattr_(method)(*args, **kargs)
+            r['*'] = functor
+        return r
 
     def close(self):
         self.stop()
@@ -81,7 +91,7 @@ class ServerBase(object):
 
     def _zerorpc_inspect(self, method=None, long_doc=True):
         if method:
-            methods = {method: self._methods[method]}
+            methods = {method: self._get_method(method)}
         else:
             methods = dict((m, f) for m, f in self._methods.items()
                     if not m.startswith('_'))
@@ -97,15 +107,26 @@ class ServerBase(object):
                 if not m.startswith('_')]
         self._methods['_zerorpc_name'] = lambda: self._name
         self._methods['_zerorpc_ping'] = lambda: ['pong', self._name]
-        self._methods['_zerorpc_help'] = lambda m: self._methods[m].__doc__
+        self._methods['_zerorpc_help'] = lambda m: self._get_method(m).__doc__
         self._methods['_zerorpc_args'] = \
-            lambda m: self._methods[m]._zerorpc_args()
+            lambda m: self._get_method(m)._zerorpc_args()
         self._methods['_zerorpc_inspect'] = self._zerorpc_inspect
 
-    def __call__(self, method, *args):
-        if method not in self._methods:
+    def _get_method(self, method):
+        f = self._methods.get(method, None)
+        if f is None:
+            wilcard = self._methods.get('*', None)
+            if wilcard is not None:
+                def f(*args, **kargs):
+                    return wilcard(method, *args, **kargs)
+                if not isinstance(f, DecoratorBase):
+                    f = rep(f)
+        if f is None:
             raise NameError(method)
-        return self._methods[method](*args)
+        return f
+
+    def __call__(self, method, *args):
+        return self._get_method(method)(*args)
 
     def _print_traceback(self, protocol_v1):
         exc_type, exc_value, exc_traceback = sys.exc_info()
@@ -132,9 +153,8 @@ class ServerBase(object):
         event = bufchan.recv()
         try:
             self._context.middleware_load_task_context(event.header)
-            functor = self._methods.get(event.name, None)
-            if functor is None:
-                raise NameError(event.name)
+            functor = self._get_method(event.name)
+            print type(functor), functor
             functor.pattern.process_call(self._context, bufchan, event, functor)
         except LostRemote:
             self._print_traceback(protocol_v1)

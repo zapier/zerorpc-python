@@ -22,6 +22,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import core
+from .events import WrappedEvents
 
 
 class ReqRep():
@@ -68,4 +70,48 @@ class ReqStream():
             bufchan.channel.channel.close()
         return iterator(event)
 
-patterns_list = [ReqStream(), ReqRep()]
+
+class ReqContext():
+
+    def process_call(self, context, bufchan, event, functor):
+        context_gen =context.middleware_call_procedure(functor, *event.args)
+        methods = context_gen.next()
+        wchannel = WrappedEvents(bufchan)
+        server = core.ServerBase(wchannel, methods, heartbeat=None)
+        bufchan.emit('CTX', (None,))
+        try:
+            server.run()
+        except Exception as e:
+            try:
+                context_gen.throw(e)
+            except StopIteration:
+                pass
+        else:
+            try:
+                context_gen.next()
+            except StopIteration:
+                pass
+        finally:
+            server.close()
+            wchannel.close()
+
+    def accept_answer(self, event):
+        return event.name == 'CTX'
+
+    def process_answer(self, context, bufchan, event, method,
+            raise_remote_error):
+        if event.name == 'ERR':
+            raise_remote_error(event)
+        wchannel = WrappedEvents(bufchan)
+
+        class ContextClient(core.ClientBase):
+            def close(self):
+                self._channel.emit('CTX_CLOSE', (None,))
+                super(ContextClient, self).close()
+                bufchan.close()
+                bufchan.channel.close()
+                bufchan.channel.channel.close()
+
+        return ContextClient(wchannel, heartbeat=None)
+
+patterns_list = [ReqContext(), ReqStream(), ReqRep()]

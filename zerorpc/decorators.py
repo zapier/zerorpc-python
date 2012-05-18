@@ -63,3 +63,7 @@ class rep(DecoratorBase):
 
 class stream(DecoratorBase):
     pattern = ReqStream()
+
+
+class context(DecoratorBase):
+    pattern = ReqContext()

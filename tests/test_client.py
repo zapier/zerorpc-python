@@ -66,6 +66,7 @@ def test_client_quick_connect():
 
 
 def test_client_encrypt_connect():
+    # TODO: could LostRemote be better? maybe raise a AuthError?
     endpoint = random_ipc_endpoint()
 
     class MySrv(object):
@@ -83,9 +84,17 @@ def test_client_encrypt_connect():
     assert client.lolita() == 42
     client.close()
 
-    bad_server_public, _ = zmq.curve_keypair()
-    client = zerorpc.Client(heartbeat=1, curve_key=bad_server_public)
+    # no key
+    client = zerorpc.Client(heartbeat=0.25)
     client.connect(endpoint)
-    # TODO: could this be better? maybe raise a AuthError?
     with assert_raises(zerorpc.LostRemote):
-        assert client.lolita() != 42
+        client.lolita()
+    client.close()
+
+    # bad key
+    bad_server_public, _ = zmq.curve_keypair()
+    client = zerorpc.Client(heartbeat=0.25, curve_key=bad_server_public)
+    client.connect(endpoint)
+    with assert_raises(zerorpc.LostRemote):
+        client.lolita()
+    client.close()

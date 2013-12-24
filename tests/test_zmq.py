@@ -28,7 +28,7 @@ import gevent
 from zerorpc import zmq
 
 
-def test1():
+def taest1():
     def server():
         c = zmq.Context()
         s = c.socket(zmq.REP)

@@ -27,6 +27,8 @@ import gevent
 import zmq
 
 import zerorpc
+
+from nose.tools import assert_raises
 from testutils import teardown, random_ipc_endpoint
 
 def test_client_connect():
@@ -79,13 +81,11 @@ def test_client_encrypt_connect():
     client.connect(endpoint)
 
     assert client.lolita() == 42
-
-    bad_key, _ = zmq.curve_keypair()
-    client = zerorpc.Client(curve_key=bad_key)
-    client.connect(endpoint)
-    # TODO: better technique here?
-    try:
-        assert client.lolita() != 42
-    except:
-        pass
     client.close()
+
+    bad_server_public, _ = zmq.curve_keypair()
+    client = zerorpc.Client(heartbeat=1, curve_key=bad_server_public)
+    client.connect(endpoint)
+    # TODO: could this be better? maybe raise a AuthError?
+    with assert_raises(zerorpc.LostRemote):
+        assert client.lolita() != 42

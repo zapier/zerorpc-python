@@ -263,8 +263,8 @@ class ClientBase(object):
 class Server(SocketBase, ServerBase):
 
     def __init__(self, methods=None, name=None, context=None, pool_size=None,
-            heartbeat=5):
-        SocketBase.__init__(self, zmq.ROUTER, context)
+            heartbeat=5, curve_key=None):
+        SocketBase.__init__(self, zmq.ROUTER, context, curve_key)
         if methods is None:
             methods = self
 
@@ -281,8 +281,8 @@ class Server(SocketBase, ServerBase):
 class Client(SocketBase, ClientBase):
 
     def __init__(self, connect_to=None, context=None, timeout=30, heartbeat=5,
-            passive_heartbeat=False):
-        SocketBase.__init__(self, zmq.DEALER, context=context)
+            passive_heartbeat=False, curve_key=None):
+        SocketBase.__init__(self, zmq.DEALER, context, curve_key)
         ClientBase.__init__(self, self._events, context, timeout, heartbeat,
                 passive_heartbeat)
         if connect_to:
@@ -295,8 +295,8 @@ class Client(SocketBase, ClientBase):
 
 class Pusher(SocketBase):
 
-    def __init__(self, context=None, zmq_socket=zmq.PUSH):
-        super(Pusher, self).__init__(zmq_socket, context=context)
+    def __init__(self, context=None, zmq_socket=zmq.PUSH, curve_key=None):
+        super(Pusher, self).__init__(zmq_socket, context, curve_key)
 
     def __call__(self, method, *args):
         self._events.emit(method, args,
@@ -308,8 +308,8 @@ class Pusher(SocketBase):
 
 class Puller(SocketBase):
 
-    def __init__(self, methods=None, context=None, zmq_socket=zmq.PULL):
-        super(Puller, self).__init__(zmq_socket, context=context)
+    def __init__(self, methods=None, context=None, zmq_socket=zmq.PULL, curve_key=None):
+        super(Puller, self).__init__(zmq_socket, context, curve_key)
 
         if methods is None:
             methods = self

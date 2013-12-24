@@ -171,7 +171,7 @@ class Event(object):
 
 
 class Events(object):
-    def __init__(self, zmq_socket_type, context=None):
+    def __init__(self, zmq_socket_type, context=None, curve_key=None):
         self._zmq_socket_type = zmq_socket_type
         self._context = context or Context.get_instance()
         self._socket = zmq.Socket(self._context, zmq_socket_type)
@@ -181,6 +181,20 @@ class Events(object):
             self._send = Sender(self._socket)
         if zmq_socket_type in (zmq.PULL, zmq.SUB, zmq.DEALER, zmq.ROUTER):
             self._recv = Receiver(self._socket)
+        if curve_key:
+            if zmq_socket_type in (zmq.PUSH, zmq.PUB, zmq.DEALER):
+                client_public, client_secret = zmq.curve_keypair()
+                self._socket.curve_serverkey = curve_key # the server_public
+                self._socket.curve_publickey = client_public
+                self._socket.curve_secretkey = client_secret
+            elif zmq_socket_type in (zmq.PULL, zmq.SUB, zmq.ROUTER):
+                self._socket.curve_secretkey = curve_key # the server_secret
+                self._socket.curve_server = True
+            else:
+                message = ('Curve needs to assign a server for this socket'
+                           ' type %r' % zmq_socket_type)
+                raise TypeError(message)
+            assert self._socket.mechanism == zmq.CURVE
 
     @property
     def recv_is_available(self):

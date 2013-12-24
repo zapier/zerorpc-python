@@ -24,6 +24,7 @@
 
 
 import gevent
+import zmq
 
 import zerorpc
 from testutils import teardown, random_ipc_endpoint
@@ -60,3 +61,31 @@ def test_client_quick_connect():
     client = zerorpc.Client(endpoint)
 
     assert client.lolita() == 42
+
+
+def test_client_encrypt_connect():
+    endpoint = random_ipc_endpoint()
+
+    class MySrv(object):
+        def lolita(self):
+            return 42
+
+    server_public, server_secret = zmq.curve_keypair()
+    srv = zerorpc.Server(MySrv(), curve_key=server_secret)
+    srv.bind(endpoint)
+    gevent.spawn(srv.run)
+
+    client = zerorpc.Client(curve_key=server_public)
+    client.connect(endpoint)
+
+    assert client.lolita() == 42
+
+    bad_key, _ = zmq.curve_keypair()
+    client = zerorpc.Client(curve_key=bad_key)
+    client.connect(endpoint)
+    # TODO: better technique here?
+    try:
+        assert client.lolita() != 42
+    except:
+        pass
+    client.close()
